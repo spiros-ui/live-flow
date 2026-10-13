@@ -1,6 +1,9 @@
 {
   "name": "live-flow",
-  "owner": { "name": "Spiros" },
+  "description": "live-flow: see what Claude is doing as live boxes and arrows.",
+  "owner": {
+    "name": "Spiros"
+  },
   "plugins": [
     {
       "name": "live-flow",
