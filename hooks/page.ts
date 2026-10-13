@@ -89,21 +89,23 @@ function route(a: Slot, b: Slot): string {
 export type Panel = { source: string; alt: string; width: number; height: number }
 
 /** The whole panel, sized to `width` CSS pixels. */
-export function drawPanel(nodes: FlowNode[], tasks: PlanTask[], width: number): Panel {
+export function drawPanel(nodes: FlowNode[], tasks: PlanTask[], width: number, now = Date.now(), refreshMs = 10_000): Panel {
   const W = Math.max(260, Math.round(width))
   const pad = 12
   const gapX = W >= 420 ? 44 : 18
   const gapY = 34
   const cols = Math.max(1, Math.floor((W - 2 * pad - 24 + gapX) / (150 + gapX)))
   const cardW = cols === 1 ? Math.min(W - 2 * pad - 24, 240) : Math.floor((W - 2 * pad - 24 - (cols - 1) * gapX) / cols)
-  const cardH = 104
+  const cardH = 124
   const parts: string[] = []
   const overlays: string[] = []
   let y = 8
 
   // ---- title, tiles and legend, as on the page
   parts.push(`<text x="${pad}" y="${y + 30}" font-family="${DISPLAY}" font-size="34" font-weight="700"><tspan ${paint('ink', 'fill')}>Live </tspan><tspan ${paint('accent', 'fill')}>flow</tspan></text>`)
-  y += 46
+  y += 44
+  parts.push(...refreshLine(pad, y, W - 2 * pad, now, refreshMs))
+  y += 26
   const work = nodes.filter(n => n.kind !== 'prompt')
   const tiles: [string, string, keyof typeof D][] = [
     [String(work.reduce((s, n) => s + (n.kind === 'group' ? n.count : 1), 0)), 'steps', 'ink'],
@@ -179,6 +181,29 @@ export function drawPanel(nodes: FlowNode[], tasks: PlanTask[], width: number): 
     y += bayH + 34
   }
 
+  // ---- the helpers: each one's task, what it is doing now, its last steps
+  {
+    const helpers = nodes.filter(n => n.kind === 'agent')
+    const bw = W - 2 * pad - 24
+    const blocks = helpers.map(h => helperBlock(h, pad + 12, 0, bw))
+    const inner = blocks.reduce((s, b) => s + b.h + 12, 0)
+    const bayH = helpers.length ? 30 + inner + 4 : 74
+    const working = helpers.filter(h => h.status === 'running').length
+    bay('Helpers', helpers.length ? `${helpers.length} · ${working} working` : 'none yet', y, bayH)
+    if (!helpers.length) {
+      wrap('A helper is a second agent Claude starts for a side job. Each one shows here with what it is doing.', Math.floor((W - 2 * pad - 32) / 6.6), 2).forEach((l, j) =>
+        parts.push(text(pad + 16, y + 34 + j * 16, l, BODY, 12, 400, 'muted')),
+      )
+    }
+    let hy = y + 30
+    helpers.forEach(h => {
+      const b = helperBlock(h, pad + 12, hy, bw)
+      parts.push(b.svg)
+      hy += b.h + 12
+    })
+    y += bayH + 34
+  }
+
   // ---- one bay per request
   const groups: { title: string; sub: string; items: { n: FlowNode; i: number }[] }[] = []
   nodes.forEach((n, i) => {
@@ -232,18 +257,17 @@ export function drawPanel(nodes: FlowNode[], tasks: PlanTask[], width: number): 
     const border: keyof typeof D = i === liveIdx ? 'accent' : n.status === 'error' ? 'bad' : n.kind === 'agent' ? 'idea' : 'line'
     const fill: keyof typeof D = n.kind === 'prompt' ? 'ideaBg' : 'panel'
     const dot: keyof typeof D = n.status === 'slow' ? 'warn' : n.status === 'error' ? 'bad' : 'ok'
-    const name = wrap(n.name, Math.floor((s.w - 20) / 8), 2)
-    const foot =
-      n.kind === 'agent' && n.status === 'running' && n.now
-        ? text(s.x + 10, s.y + s.h - 10, wrap(`now: ${n.now}`, Math.floor((s.w - 20) / 6.6), 1)[0] ?? '', MONO, 11, 500, 'idea')
-        : text(s.x + 10, s.y + s.h - 10, `#${i + 1} · ${timeOf(n)}${n.kind === 'agent' && n.steps ? ` · ${n.steps} step${n.steps === 1 ? '' : 's'}` : ''}`, MONO, 11, 500, 'muted')
+    const label = kindLabel(n)
+    const body = wrap(bodyText(n), Math.floor((s.w - 20) / 6.5), 3)
+    const foot = text(s.x + 10, s.y + s.h - 10, `#${i + 1} · ${timeOf(n)}${n.kind === 'agent' && n.steps ? ` · ${n.steps} step${n.steps === 1 ? '' : 's'}` : ''}`, MONO, 11, 500, 'muted')
     parts.push(
       `<a href="#d${i}"><g class="cardbox"><title>${esc(n.name)}: ${esc(statusWord(n.status))}</title>`,
       i === liveIdx ? `<rect x="${s.x - 4}" y="${s.y - 4}" width="${s.w + 8}" height="${s.h + 8}" rx="15" fill="none" ${paint('accent', 'stroke')} stroke-width="4" opacity="0.3"/>` : '',
       `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="12" ${paint(fill, 'fill')} ${paint(border, 'stroke')} stroke-width="2" ${n.status === 'error' ? 'stroke-dasharray="6 4"' : ''}/>`,
-      icon(n.icon, s.x + 10, s.y + 10, 30),
+      icon(n.icon, s.x + 10, s.y + 10, 26),
+      text(s.x + 44, s.y + 30, wrap(label, Math.floor((s.w - 70) / 8.5), 1)[0] ?? '', DISPLAY, 17, 700, 'ink'),
       `<circle cx="${s.x + s.w - 14}" cy="${s.y + 14}" r="5.5" ${paint(dot, 'fill')}>${n.status === 'running' ? '<animate attributeName="r" values="5.5;8;5.5" dur="1.4s" repeatCount="indefinite"/>' : ''}</circle>`,
-      name.map((l, j) => text(s.x + 10, s.y + 60 + j * 18, l, DISPLAY, 17, 700, 'ink')).join(''),
+      body.map((l, j) => text(s.x + 10, s.y + 56 + j * 16, l, BODY, 12.5, 400, n.kind === 'agent' && j === body.length - 1 && n.status === 'running' && n.now ? 'idea' : 'ink')).join(''),
       foot,
       '</g></a>',
     )
@@ -312,4 +336,80 @@ function detailCard(n: FlowNode, i: number, W: number, top: number): string {
   section('IMPROVE', chips.improve, 'ideaBg', '→', 'idea')
   const h = y + 8
   return `<g id="d${i}" class="detail"><g transform="translate(${x} ${top})"><rect x="0" y="0" width="${w}" height="${h}" rx="14" ${paint('panel', 'fill')} ${paint('ink', 'stroke')} stroke-width="2"/>${rows.join('')}</g></g>`
+}
+
+/** The card's short label: what kind of step it is, in a word or two. */
+function kindLabel(n: FlowNode): string {
+  if (n.kind === 'prompt') return 'You asked'
+  if (n.kind === 'agent') return 'Helper'
+  if (n.kind === 'group') return n.groupKey === 'read' ? 'Reading files' : n.groupKey === 'web' ? 'Web look-up' : 'Searching'
+  const byIcon: Record<string, string> = { terminal: 'Command', pen: 'File change', book: 'Reading', search: 'Search', globe: 'Web look-up', spark: 'Skill', send: 'Shared', chat: 'Question' }
+  if (n.icon === 'plug') return n.name.split(':')[0] || 'Connected app'
+  return byIcon[n.icon] ?? n.name
+}
+
+/** What the step did, in plain words, for the card's body. */
+function bodyText(n: FlowNode): string {
+  if (n.kind === 'prompt') return n.where
+  if (n.kind === 'agent') return n.status === 'running' && n.now ? `${n.name}. Now: ${n.now}` : n.name
+  if (n.icon === 'plug') return n.name.split(':').slice(1).join(':').trim() || n.name
+  if (n.kind === 'group') {
+    const last = n.where.split('/').filter(Boolean).pop()
+    return last ? `${n.name}, last: ${last}` : n.name
+  }
+  return n.name
+}
+
+/** One helper in the Helpers bay: its task, state, what it is doing, its last steps. */
+function helperBlock(h: FlowNode, x: number, y: number, w: number): { svg: string; h: number } {
+  const chars = Math.floor((w - 56) / 6.6)
+  const task = wrap(h.name, Math.floor((w - 130) / 8.5), 2)
+  const word = h.status === 'running' ? 'working' : statusWord(h.status)
+  const dot: keyof typeof D = h.status === 'error' ? 'bad' : h.status === 'slow' ? 'warn' : 'ok'
+  const type = h.where.replace(/^helper · /, '')
+  const lines: string[] = []
+  let cy = y + 26
+  task.forEach((l, j) => lines.push(text(x + 44, cy + j * 19, l, DISPLAY, 17, 700, 'ink')))
+  cy += task.length * 19 + 2
+  lines.push(text(x + 44, cy, wrap(`${type} helper · ${h.steps ?? 0} step${h.steps === 1 ? '' : 's'} · ${timeOf(h).replace(' · working', '')}`, Math.floor((w - 56) / 6.8), 1)[0] ?? '', MONO, 11, 500, 'muted'))
+  cy += 18
+  const now = h.status === 'running' ? `Now: ${h.now ?? 'starting'}` : h.status === 'error' ? `Failed: ${h.error ?? ''}` : 'Finished its job'
+  wrap(now, chars, 2).forEach((l, j) => lines.push(text(x + 14, cy + j * 16, l, BODY, 12.5, 600, h.status === 'error' ? 'bad' : h.status === 'running' ? 'idea' : 'ok')))
+  cy += 18 * Math.min(2, Math.ceil(now.length / chars) || 1)
+  for (const step of (h.recent ?? []).slice(-3)) {
+    lines.push(text(x + 14, cy, `· ${wrap(step, chars, 1)[0] ?? ''}`, BODY, 12, 400, 'muted'))
+    cy += 16
+  }
+  const height = cy - y + 6
+  const svg = [
+    `<rect x="${x}" y="${y}" width="${w}" height="${height}" rx="12" ${paint('panel', 'fill')} ${paint(h.status === 'error' ? 'bad' : 'idea', 'stroke')} stroke-width="2"/>`,
+    icon('helper', x + 10, y + 10, 26),
+    `<circle cx="${x + w - 16}" cy="${y + 16}" r="5.5" ${paint(dot, 'fill')}>${h.status === 'running' ? '<animate attributeName="r" values="5.5;8;5.5" dur="1.4s" repeatCount="indefinite"/>' : ''}</circle>`,
+    text(x + w - 26 - word.length * 6.8, y + 20, word, MONO, 11, 600, dot, ''),
+    ...lines,
+  ].join('')
+  return { svg, h: height }
+}
+
+function hhmmss(ms: number): string {
+  const d = new Date(ms)
+  const two = (v: number) => String(v).padStart(2, '0')
+  return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`
+}
+
+/** "Updated 14:32:05 · next refresh in 9s" with a bar that empties. SMIL counts down. */
+function refreshLine(x: number, y: number, w: number, now: number, refreshMs: number): string[] {
+  const secs = Math.max(1, Math.round(refreshMs / 1000))
+  const out: string[] = [text(x, y + 12, `Updated ${hhmmss(now)}`, MONO, 12, 600, 'ink')]
+  for (let k = 0; k < secs; k++) {
+    out.push(
+      `<text x="${x + w}" y="${y + 12}" text-anchor="end" font-family="${MONO}" font-size="12" font-weight="500" ${paint('muted', 'fill')} visibility="${k === 0 ? 'visible' : 'hidden'}">next refresh in ${secs - k}s<set attributeName="visibility" to="visible" begin="${k}s" dur="1s"/>${k === 0 ? `<set attributeName="visibility" to="hidden" begin="1s"/>` : ''}</text>`,
+    )
+  }
+  out.push(
+    `<text x="${x + w}" y="${y + 12}" text-anchor="end" font-family="${MONO}" font-size="12" font-weight="500" ${paint('accent', 'fill')} visibility="hidden">refreshing…<set attributeName="visibility" to="visible" begin="${secs}s" fill="freeze"/></text>`,
+    `<rect x="${x}" y="${y + 18}" width="${w}" height="3" rx="1.5" ${paint('line', 'fill')}/>`,
+    `<rect x="${x}" y="${y + 18}" width="${w}" height="3" rx="1.5" ${paint('accent', 'fill')}><animate attributeName="width" from="${w}" to="0" dur="${secs}s" fill="freeze"/></rect>`,
+  )
+  return out
 }

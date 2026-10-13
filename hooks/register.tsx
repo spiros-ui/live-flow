@@ -23,6 +23,9 @@ const TITLE = 'Live flow'
 const nodes = atom({ plugin: 'live-flow', key: 'nodes' } as const, [])
 const tasks = atom({ plugin: 'live-flow', key: 'tasks' } as const, [])
 const selected = atom({ plugin: 'live-flow', key: 'selected' } as const, null)
+const tick = atom({ plugin: 'live-flow', key: 'tick' } as const, 0)
+
+const REFRESH_MS = 10_000
 
 const DOT: Record<FlowNode['status'], string> = { running: '🟢', ok: '🟢', slow: '🟠', error: '🔴' }
 
@@ -56,6 +59,8 @@ export const register: Register = on => {
       description: 'Open the live flow: boxes and arrows of what Claude is doing',
     })
     void $.ui.open({ id: PANE, title: TITLE })
+    // Redraw the panel every 10 seconds, so its clock and countdown stay true.
+    $.clock.every(REFRESH_MS, () => void update($, tick, n => n + 1))
 
     return next(e)
   })
@@ -147,7 +152,11 @@ export const register: Register = on => {
     if (e.agentId !== undefined) {
       const agentId = e.agentId
       await update($, nodes, list =>
-        list.map(n => (n.kind === 'agent' && n.agentId === agentId ? { ...n, steps: (n.steps ?? 0) + 1, now: what.name } : n)),
+        list.map(n =>
+          n.kind === 'agent' && n.agentId === agentId
+            ? { ...n, steps: (n.steps ?? 0) + 1, now: what.name, recent: [...(n.recent ?? []), what.name].slice(-4) }
+            : n,
+        ),
       )
       return next(e)
     }
@@ -312,7 +321,8 @@ async function drawLive($: EngineInterface, e: RenderInput<'Pane'>, columns: num
   }
 
   const { Svg } = $.ui.resolve(e)
-  const panel = drawPanel(list, plan, Math.min(1100, columns * 7.5))
+  await read($, tick)
+  const panel = drawPanel(list, plan, Math.min(1100, columns * 7.5), await $.clock.now(), REFRESH_MS)
 
   return <Svg key="flow" source={panel.source} alt={panel.alt} width={panel.width} height={panel.height} isInteractive />
 }

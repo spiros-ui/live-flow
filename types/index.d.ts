@@ -18,6 +18,7 @@ export type FlowNode = {
   steps?: number
   tokens?: number
   now?: string
+  recent?: string[]
   error?: string
   groupKey?: string
 }
@@ -34,6 +35,7 @@ declare module 'claude-code' {
       nodes: FlowNode[]
       tasks: PlanTask[]
       selected: string | null
+      tick: number
     }
   }
 }
