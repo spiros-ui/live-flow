@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderInput } from 'claude-code'
 
 import type { FlowNode, PlanTask } from '../types'
 import {
@@ -64,9 +64,7 @@ export const register: Register = on => {
     await refreshStatus($)
 
     return {
-      text: opened.isPlaced
-        ? 'Opened the live flow pane.'
-        : 'The live flow pane is open but this screen has no room for it yet; widen the window.',
+      text: opened.isPlaced ? 'Live flow, also open in its pane.' : 'Live flow.',
     }
   })
 
@@ -259,82 +257,91 @@ export const register: Register = on => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const list = await read($, nodes)
-    const plan = await read($, tasks)
-    const pick = await read($, selected)
-    const chosen = list.find(n => n.id === pick)
-    const choose = (id: string) => () => update($, selected, cur => (cur === id ? null : id))
+  on('ui.render', { component: 'Pane', requestId: PANE }, ($, e) => drawLive($, e, e.props.bodyColumns))
 
-    if (e.surface === 'terminal') {
-      const { Box, Text, Button } = $.ui.resolve(e)
-      return (
-        <Box flexDirection="column">
-          {plan.length > 0 && <Text bold>The plan</Text>}
-          {plan.map(t => (
-            <Text color={t.status === 'completed' ? 'success' : t.status === 'in_progress' ? 'warning' : 'subtle'}>
-              {t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '▶' : '○'} {t.subject}
-            </Text>
-          ))}
-          <Text bold>What Claude is doing</Text>
-          {list.length === 0 && <Text dimColor>Nothing yet.</Text>}
-          {list.map((n, i) => (
-            <Box flexDirection="column">
-              {i > 0 && <Text dimColor>  ↓</Text>}
-              <Button key={`pick-${n.id}`} plain onPress={choose(n.id)}>
-                {n.status === 'error' ? '✗' : n.status === 'running' ? '●' : '✓'} #{i + 1} {short(n.name, 40)}{' '}
-                <Text dimColor>{timeOf(n)}</Text>
-              </Button>
-            </Box>
-          ))}
-          {chosen !== undefined && (
-            <Box flexDirection="column" borderStyle="round" paddingX={1}>
-              <Text bold>
-                {chosen.name}: {statusWord(chosen.status)}
-              </Text>
-              <Text dimColor>where: {chosen.where || '—'}</Text>
-              <Text dimColor>time: {timeOf(chosen)}</Text>
-              {chipsFor(chosen).good.map(c => (
-                <Text color="success">+ {c}</Text>
-              ))}
-              {chipsFor(chosen).weak.map(c => (
-                <Text color="error">– {c}</Text>
-              ))}
-              {chipsFor(chosen).improve.map(c => (
-                <Text color="suggestion">→ {c}</Text>
-              ))}
-            </Box>
-          )}
-        </Box>
-      )
-    }
+  // The desktop app may not show a pane; the /flow row in the chat always shows,
+  // so it draws the same live picture (it redraws as the steps change).
+  on('ui.render', { component: 'CommandOutput', props: { command: 'flow' } }, ($, e) =>
+    drawLive($, e, e.viewport?.columns ?? 60),
+  )
+}
 
-    const { Box, Text, Button, Svg } = $.ui.resolve(e)
-    const width = Math.max(320, Math.min(1100, Math.round(e.props.bodyColumns * 7.5)))
-    const flow = drawFlow(list, plan, pick, width)
-    const detail = chosen === undefined ? undefined : drawDetail(chosen, width)
+/** The live drawing: the same tree in the pane and inline under /flow. */
+async function drawLive($: EngineInterface, e: RenderInput<'Pane'> | RenderInput<'CommandOutput'>, columns: number) {
+  const list = await read($, nodes)
+  const plan = await read($, tasks)
+  const pick = await read($, selected)
+  const chosen = list.find(n => n.id === pick)
+  const choose = (id: string) => () => update($, selected, cur => (cur === id ? null : id))
 
+  if (e.surface === 'terminal') {
+    const { Box, Text, Button } = $.ui.resolve(e)
     return (
-      <Box flexDirection="column" gap={1}>
-        <Text bold>
-          {list.length === 0 ? 'Live flow: waiting for Claude to start working' : statusLine(list, plan).replace('  (/flow)', '')}
-        </Text>
-        <Svg key="flow" source={flow.source} alt={flow.alt} isInteractive />
-        {list.length > 0 && <Text dimColor>Tap a step to see what it did:</Text>}
-        <Box flexDirection="row" flexWrap="wrap" gap={1}>
-          {list.map((n, i) => (
-            <Button key={`pick-${n.id}`} variant={n.id === pick ? 'primary' : 'secondary'} onPress={choose(n.id)}>
-              {`${i + 1} ${DOT[n.status]} ${short(n.name, 24)}`}
+      <Box flexDirection="column">
+        {plan.length > 0 && <Text bold>The plan</Text>}
+        {plan.map(t => (
+          <Text color={t.status === 'completed' ? 'success' : t.status === 'in_progress' ? 'warning' : 'subtle'}>
+            {t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '▶' : '○'} {t.subject}
+          </Text>
+        ))}
+        <Text bold>What Claude is doing</Text>
+        {list.length === 0 && <Text dimColor>Nothing yet.</Text>}
+        {list.map((n, i) => (
+          <Box flexDirection="column">
+            {i > 0 && <Text dimColor>  ↓</Text>}
+            <Button key={`pick-${n.id}`} plain onPress={choose(n.id)}>
+              {n.status === 'error' ? '✗' : n.status === 'running' ? '●' : '✓'} #{i + 1} {short(n.name, 40)}{' '}
+              <Text dimColor>{timeOf(n)}</Text>
             </Button>
-          ))}
-        </Box>
-        {detail !== undefined && chosen !== undefined && (
-          <Box flexDirection="column" gap={1}>
-            <Svg key="detail" source={detail.source} alt={detail.alt} />
-            <Button key="close-detail" role="dismiss" label="Close details" onPress={() => update($, selected, () => null)} />
+          </Box>
+        ))}
+        {chosen !== undefined && (
+          <Box flexDirection="column" borderStyle="round" paddingX={1}>
+            <Text bold>
+              {chosen.name}: {statusWord(chosen.status)}
+            </Text>
+            <Text dimColor>where: {chosen.where || '—'}</Text>
+            <Text dimColor>time: {timeOf(chosen)}</Text>
+            {chipsFor(chosen).good.map(c => (
+              <Text color="success">+ {c}</Text>
+            ))}
+            {chipsFor(chosen).weak.map(c => (
+              <Text color="error">– {c}</Text>
+            ))}
+            {chipsFor(chosen).improve.map(c => (
+              <Text color="suggestion">→ {c}</Text>
+            ))}
           </Box>
         )}
       </Box>
     )
-  })
+  }
+
+  const { Box, Text, Button, Svg } = $.ui.resolve(e)
+  const width = Math.max(320, Math.min(1100, Math.round(columns * 7.5)))
+  const flow = drawFlow(list, plan, pick, width)
+  const detail = chosen === undefined ? undefined : drawDetail(chosen, width)
+
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Text bold>
+        {list.length === 0 ? 'Live flow: waiting for Claude to start working' : statusLine(list, plan).replace('  (/flow)', '')}
+      </Text>
+      <Svg key="flow" source={flow.source} alt={flow.alt} isInteractive />
+      {list.length > 0 && <Text dimColor>Tap a step to see what it did:</Text>}
+      <Box flexDirection="row" flexWrap="wrap" gap={1}>
+        {list.map((n, i) => (
+          <Button key={`pick-${n.id}`} variant={n.id === pick ? 'primary' : 'secondary'} onPress={choose(n.id)}>
+            {`${i + 1} ${DOT[n.status]} ${short(n.name, 24)}`}
+          </Button>
+        ))}
+      </Box>
+      {detail !== undefined && chosen !== undefined && (
+        <Box flexDirection="column" gap={1}>
+          <Svg key="detail" source={detail.source} alt={detail.alt} />
+          <Button key="close-detail" role="dismiss" label="Close details" onPress={() => update($, selected, () => null)} />
+        </Box>
+      )}
+    </Box>
+  )
 }

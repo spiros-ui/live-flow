@@ -1,6 +1,6 @@
 {
   "name": "live-flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A live pane that draws what Claude is doing as boxes and moving arrows: the plan, each tool call and each helper agent.",
   "types": "./types/index.d.ts",
   "author": {

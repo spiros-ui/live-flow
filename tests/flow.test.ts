@@ -140,4 +140,22 @@ describe('live-flow', () => {
     expect(await ui.findAll({ type: 'Button', text: /Read/ })).toHaveLength(1)
     await ui.unmount()
   })
+
+  test('the /flow row in the chat draws the same live picture', async ($, on) => {
+    const clock = mock.clock(on)
+    tools(on, clock, 1000, { result: { stdout: '', stderr: '', interrupted: false } })
+
+    await $.tool.call({ tool: 'Bash', command: 'ls', description: 'List the files' })
+
+    for (const surface of ['desktop', 'mobile', 'terminal'] as const) {
+      const ui = await $.ui.mount({
+        plugin: 'live-flow',
+        surface,
+        component: 'CommandOutput',
+        props: { command: 'flow', args: '', text: 'Live flow.', isErrored: false },
+      })
+      expect(await ui.find({ text: /List the files/ })).toBeDefined()
+      await ui.unmount()
+    }
+  })
 })
