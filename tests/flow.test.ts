@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 
-import { flowMarkdown } from '../hooks/flow'
 
 const PANE = {
   plugin: 'live-flow',
@@ -28,27 +28,28 @@ function tools(on: On, clock: ReturnType<typeof mock.clock>, ms: number, answer:
 }
 
 describe('live-flow', () => {
-  test('a tool call becomes a green box with its own detail card', async ($, on) => {
+  const panelOf = async ($: Engine, surface: (typeof REMOTE)[number]) => {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const svgs = await ui.findAll({ type: 'Svg' })
+    await ui.unmount()
+    expect(svgs).toHaveLength(1)
+    expect(svgs[0]?.props.width).toBe(600)
+    return String(svgs[0]?.props.source)
+  }
+
+  test('a tool call becomes a green card with its own detail card', async ($, on) => {
     const clock = mock.clock(on)
     tools(on, clock, 2000, { result: { stdout: 'all passed', stderr: '', interrupted: false } })
 
     await $.tool.call({ tool: 'Bash', command: 'npm test', description: 'Run the tests' })
 
     for (const surface of REMOTE) {
-      const ui = await $.ui.mount({ ...PANE, surface })
-      const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
+      const source = await panelOf($, surface)
       expect(source).toContain('Run the tests')
-      expect(source).toContain('fill="#24895C"')
+      expect(source).toContain('fill="#4CC08A"')
       expect(source).toContain('2.0s')
-
-      const button = await ui.find({ type: 'Button', text: /Run the tests/ })
-      expect(button).toBeDefined()
-      await ui.press({ key: String(button?.key) })
-      const detail = (await ui.findAll({ type: 'Svg' }))[1]
-      expect(String(detail?.props.alt)).toContain('Finished in 2.0s')
-      await ui.press({ key: 'close-detail' })
-      expect(await ui.findAll({ type: 'Svg' })).toHaveLength(1)
-      await ui.unmount()
+      expect(source).toContain('href="#d0"')
+      expect(source).toContain('Finished in 2.0s')
     }
 
     const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -56,30 +57,20 @@ describe('live-flow', () => {
     await term.unmount()
   })
 
-  test('a failed call becomes a red box that says what failed', async ($, on) => {
+  test('a failed call becomes a red dashed card that says what failed', async ($, on) => {
     const clock = mock.clock(on)
     tools(on, clock, 500, { isError: true, result: 'boom', text: 'Exit code 1: module not found' })
 
     await $.tool.call({ tool: 'Bash', command: 'npm run build', description: 'Build the app' })
 
     for (const surface of REMOTE) {
-      const ui = await $.ui.mount({ ...PANE, surface })
-      const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
-      expect(source).toContain('stroke="#C8423A" stroke-width="2" stroke-dasharray="6 4"')
-      expect(source).toContain('fill="#C8423A"')
-
-      const button = await ui.find({ type: 'Button', text: /🔴 Build the app/ })
-      expect(button).toBeDefined()
-      await ui.press({ key: String(button?.key) })
-      const alt = String((await ui.findAll({ type: 'Svg' }))[1]?.props.alt)
-      expect(alt).toContain('failed')
-      expect(alt).toContain('Exit code 1: module not found')
-      await ui.press({ key: 'close-detail' })
-      await ui.unmount()
+      const source = await panelOf($, surface)
+      expect(source).toContain('stroke="#EE6A60" class="stroke-bad" stroke-width="2" stroke-dasharray="6 4"')
+      expect(source).toContain('Failed: Exit code 1: module not found')
     }
   })
 
-  test('a subagent becomes a helper box that runs until it stops', async ($, on) => {
+  test('a subagent becomes a blue helper card that runs until it stops', async ($, on) => {
     mock.clock(on)
     on('agent.spawn', () => ({ model: 'claude-test', agentId: 'agent-1' }))
     on('classic.SubagentStop', () => ({}))
@@ -96,29 +87,19 @@ describe('live-flow', () => {
     } as never)
 
     for (const surface of REMOTE) {
-      const ui = await $.ui.mount({ ...PANE, surface })
-      const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
+      const source = await panelOf($, surface)
       expect(source).toContain('Find the login bug')
-      expect(source).toContain('stroke="#2D6AA8"')
       expect(source).toContain('attributeName="r"')
-      await ui.unmount()
     }
 
-    await $.classic.SubagentStop({
-      agent_id: 'agent-1',
-      agent_type: 'Explore',
-      agent_transcript_path: '',
-      stop_hook_active: false,
-    })
+    await $.classic.SubagentStop({ agent_id: 'agent-1', agent_type: 'Explore', agent_transcript_path: '', stop_hook_active: false })
 
-    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
-    expect(source).toContain('stroke="#2D6AA8"')
+    const source = await panelOf($, 'desktop')
+    expect(source).toContain('stroke="#6FA4E0"')
     expect(source).not.toContain('attributeName="r"')
-    await ui.unmount()
   })
 
-  test('consecutive reads fold into one box, and the plan shows its steps', async ($, on) => {
+  test('consecutive reads fold into one card, and the plan shows its steps', async ($, on) => {
     const clock = mock.clock(on)
     on('tool.call', async ($$, e) => {
       await clock.advance(100)
@@ -132,48 +113,10 @@ describe('live-flow', () => {
     await $.tool.call({ tool: 'Read', file_path: '/repo/b.ts' })
     await $.tool.call({ tool: 'Read', file_path: '/repo/c.ts' })
 
-    const ui = await $.ui.mount({ ...PANE, surface: 'mobile' })
-    const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
+    const source = await panelOf($, 'mobile')
     expect(source).toContain('THE PLAN')
-    expect(source).not.toContain('<style')
-    expect(source).not.toContain('class=')
     expect(source).toContain('Ship it')
     expect(source).toContain('Read 3 files')
-    expect(await ui.findAll({ type: 'Button', text: /Read/ })).toHaveLength(1)
-    await ui.unmount()
-  })
-
-  test('the /flow row in the chat draws the same live picture', async ($, on) => {
-    const clock = mock.clock(on)
-    tools(on, clock, 1000, { result: { stdout: '', stderr: '', interrupted: false } })
-
-    await $.tool.call({ tool: 'Bash', command: 'ls', description: 'List the files' })
-
-    for (const surface of ['desktop', 'mobile', 'terminal'] as const) {
-      const ui = await $.ui.mount({
-        plugin: 'live-flow',
-        surface,
-        component: 'CommandOutput',
-        props: { command: 'flow', args: '', text: 'Live flow.', isErrored: false },
-      })
-      expect(await ui.find({ text: /List the files/ })).toBeDefined()
-      await ui.unmount()
-    }
-  })
-
-  test('/flow answers with the flow as chat text, which every app shows', () => {
-    const at = 1_000_000
-    const base = { count: 1, running: 0, startedAt: at, endedAt: at + 500, where: '' }
-    const text = flowMarkdown(
-      [
-        { ...base, id: 'a', kind: 'tool', icon: 'terminal', name: 'List the files', status: 'ok' },
-        { ...base, id: 'b', kind: 'tool', icon: 'terminal', name: 'Build the app', status: 'error', error: 'Exit code 1' },
-      ],
-      [{ id: '1', subject: 'Ship it', status: 'in_progress' }],
-    )
-    expect(text).toContain('🔄 Ship it')
-    expect(text).toContain('🟢 💻 **List the files**')
-    expect(text).toContain('↓')
-    expect(text).toContain('🔴 💻 **Build the app** · 500ms · failed: Exit code 1')
+    expect(source).not.toContain('href="#d1"')
   })
 })

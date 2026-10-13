@@ -9,13 +9,13 @@ import {
   drawDetail,
   drawFlow,
   finishedStatus,
-  flowMarkdown,
   groupOf,
   isHidden,
   statusLine,
   statusWord,
   timeOf,
 } from './flow'
+import { drawPanel } from './page'
 
 const PANE = 'live-flow'
 const TITLE = 'Live flow'
@@ -64,7 +64,7 @@ export const register: Register = on => {
     await $.ui.open({ id: PANE, title: TITLE })
     await refreshStatus($)
 
-    return { text: flowMarkdown(await read($, nodes), await read($, tasks)) }
+    return { text: 'Live flow is open in the panel on the side.' }
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -258,15 +258,10 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, ($, e) => drawLive($, e, e.props.bodyColumns))
 
-  // The desktop app may not show a pane; the /flow row in the chat always shows,
-  // so it draws the same live picture (it redraws as the steps change).
-  on('ui.render', { component: 'CommandOutput', props: { command: 'flow' } }, ($, e) =>
-    drawLive($, e, e.viewport?.columns ?? 60),
-  )
 }
 
 /** The live drawing: the same tree in the pane and inline under /flow. */
-async function drawLive($: EngineInterface, e: RenderInput<'Pane'> | RenderInput<'CommandOutput'>, columns: number) {
+async function drawLive($: EngineInterface, e: RenderInput<'Pane'>, columns: number) {
   const list = await read($, nodes)
   const plan = await read($, tasks)
   const pick = await read($, selected)
@@ -316,31 +311,8 @@ async function drawLive($: EngineInterface, e: RenderInput<'Pane'> | RenderInput
     )
   }
 
-  const { Box, Text, Button, Svg } = $.ui.resolve(e)
-  const width = Math.max(320, Math.min(1100, Math.round(columns * 7.5)))
-  const flow = drawFlow(list, plan, pick, width)
-  const detail = chosen === undefined ? undefined : drawDetail(chosen, width)
+  const { Svg } = $.ui.resolve(e)
+  const panel = drawPanel(list, plan, Math.min(1100, columns * 7.5))
 
-  return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold>
-        {list.length === 0 ? 'Live flow: waiting for Claude to start working' : statusLine(list, plan).replace('  (/flow)', '')}
-      </Text>
-      <Svg key="flow" source={flow.source} alt={flow.alt} isInteractive />
-      {list.length > 0 && <Text dimColor>Tap a step to see what it did:</Text>}
-      <Box flexDirection="row" flexWrap="wrap" gap={1}>
-        {list.map((n, i) => (
-          <Button key={`pick-${n.id}`} variant={n.id === pick ? 'primary' : 'secondary'} onPress={choose(n.id)}>
-            {`${i + 1} ${DOT[n.status]} ${short(n.name, 24)}`}
-          </Button>
-        ))}
-      </Box>
-      {detail !== undefined && chosen !== undefined && (
-        <Box flexDirection="column" gap={1}>
-          <Svg key="detail" source={detail.source} alt={detail.alt} />
-          <Button key="close-detail" role="dismiss" label="Close details" onPress={() => update($, selected, () => null)} />
-        </Box>
-      )}
-    </Box>
-  )
+  return <Svg key="flow" source={panel.source} alt={panel.alt} width={panel.width} height={panel.height} isInteractive />
 }
