@@ -316,6 +316,9 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" gap={1}>
+        <Text bold>
+          {list.length === 0 ? 'Live flow: waiting for Claude to start working' : statusLine(list, plan).replace('  (/flow)', '')}
+        </Text>
         <Svg key="flow" source={flow.source} alt={flow.alt} isInteractive />
         {list.length > 0 && <Text dimColor>Tap a step to see what it did:</Text>}
         <Box flexDirection="row" flexWrap="wrap" gap={1}>

@@ -36,7 +36,7 @@ describe('live-flow', () => {
       const ui = await $.ui.mount({ ...PANE, surface })
       const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
       expect(source).toContain('Run the tests')
-      expect(source).toContain('class="d-ok"')
+      expect(source).toContain('fill="#24895C"')
       expect(source).toContain('2.0s')
 
       const button = await ui.find({ type: 'Button', text: /Run the tests/ })
@@ -63,8 +63,8 @@ describe('live-flow', () => {
     for (const surface of REMOTE) {
       const ui = await $.ui.mount({ ...PANE, surface })
       const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
-      expect(source).toContain('s-error')
-      expect(source).toContain('class="d-error"')
+      expect(source).toContain('stroke="#C8423A" stroke-width="2" stroke-dasharray="6 4"')
+      expect(source).toContain('fill="#C8423A"')
 
       const button = await ui.find({ type: 'Button', text: /🔴 Build the app/ })
       expect(button).toBeDefined()
@@ -97,8 +97,8 @@ describe('live-flow', () => {
       const ui = await $.ui.mount({ ...PANE, surface })
       const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
       expect(source).toContain('Find the login bug')
-      expect(source).toContain('k-agent s-running')
-      expect(source).toContain('d-running pulse')
+      expect(source).toContain('stroke="#2D6AA8"')
+      expect(source).toContain('attributeName="r"')
       await ui.unmount()
     }
 
@@ -111,7 +111,8 @@ describe('live-flow', () => {
 
     const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
     const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
-    expect(source).toContain('k-agent s-ok')
+    expect(source).toContain('stroke="#2D6AA8"')
+    expect(source).not.toContain('attributeName="r"')
     await ui.unmount()
   })
 
@@ -132,6 +133,8 @@ describe('live-flow', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'mobile' })
     const source = String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)
     expect(source).toContain('THE PLAN')
+    expect(source).not.toContain('<style')
+    expect(source).not.toContain('class=')
     expect(source).toContain('Ship it')
     expect(source).toContain('Read 3 files')
     expect(await ui.findAll({ type: 'Button', text: /Read/ })).toHaveLength(1)

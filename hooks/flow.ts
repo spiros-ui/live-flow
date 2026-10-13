@@ -199,49 +199,114 @@ const ICONS: Record<string, string> = {
   check: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/>',
 }
 
-const STYLE = `
-:root{--bg:#EDF1EF;--panel:#FFFFFF;--ink:#13292C;--muted:#5B6E70;--line:#B9C7C4;--accent:#E25F2A;--ok:#24895C;--warn:#C98A12;--bad:#C8423A;--idea:#2D6AA8;--ok-bg:#E2F2EA;--warn-bg:#FAF0DA;--bad-bg:#F8E3E1;--idea-bg:#E3ECF7}
-@media (prefers-color-scheme: dark){:root{--bg:#0E1A1C;--panel:#162629;--ink:#E4EEEC;--muted:#93A8A6;--line:#35504F;--accent:#F27A44;--ok:#4CC08A;--warn:#E5B04A;--bad:#EE6A60;--idea:#6FA4E0;--ok-bg:#163A2C;--warn-bg:#3A3018;--bad-bg:#3E1D1B;--idea-bg:#182D45}}
-.bg{fill:var(--bg)}
-.bay{fill:none;stroke:var(--line);stroke-width:1.5;stroke-dasharray:7 5}
-.bay-t{font:700 14px "Barlow Condensed","Arial Narrow",system-ui,sans-serif;letter-spacing:.08em;fill:var(--ink)}
-.bay-e{font:500 11px ui-monospace,Menlo,monospace;fill:var(--muted)}
-.bay-tbg{fill:var(--bg)}
-.card{fill:var(--panel);stroke:var(--line);stroke-width:2}
-.card.s-error{stroke:var(--bad);stroke-dasharray:6 4}
-.card.s-running{stroke:var(--accent)}
-.card.k-agent{stroke:var(--idea)}
-.card.k-agent.s-error{stroke:var(--bad)}
-.card.sel{stroke:var(--ink);stroke-width:3.5}
-.card.sel.s-error{stroke:var(--bad)}
-.glow{fill:none;stroke:var(--accent);stroke-width:4;opacity:.25}
-.ico{fill:none;stroke:var(--ink);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.name{font:700 15px "Barlow Condensed","Arial Narrow",system-ui,sans-serif;fill:var(--ink)}
-.when{font:500 10.5px ui-monospace,Menlo,monospace;fill:var(--muted)}
-.now{font:500 10.5px ui-monospace,Menlo,monospace;fill:var(--idea)}
-.d-ok,.d-running{fill:var(--ok)} .d-slow{fill:var(--warn)} .d-error{fill:var(--bad)} .d-pending{fill:var(--line)}
-.wire{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:6 6;animation:march 1.2s linear infinite}
-.wire.lit{stroke:var(--accent);stroke-width:3}
-.wire.fail{stroke:var(--bad);stroke-dasharray:3 6;animation:none;opacity:.8}
-.head{fill:var(--muted)} .head.lit{fill:var(--accent)} .head.fail{fill:var(--bad)}
-.bob{fill:var(--accent);stroke:var(--panel);stroke-width:2}
-.pulse{animation:pulse 1.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
-.empty{font:500 13px system-ui,sans-serif;fill:var(--muted)}
-@keyframes march{to{stroke-dashoffset:-24}}
-@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.6);opacity:.45}}
-@media (prefers-reduced-motion:reduce){.wire,.pulse{animation:none}}
-.chip-good{fill:var(--ok-bg)} .chip-weak{fill:var(--bad-bg)} .chip-improve{fill:var(--idea-bg)}
-.chip-t{font:400 12.5px system-ui,-apple-system,sans-serif;fill:var(--ink)}
-.mark-good{fill:var(--ok)} .mark-weak{fill:var(--bad)} .mark-improve{fill:var(--idea)}
-.h4{font:700 12.5px "Barlow Condensed","Arial Narrow",system-ui,sans-serif;letter-spacing:.08em;fill:var(--ink)}
-.dt{font:500 11.5px ui-monospace,Menlo,monospace;fill:var(--muted)}
-.dd{font:500 11.5px ui-monospace,Menlo,monospace;fill:var(--ink)}
-.title{font:700 22px "Barlow Condensed","Arial Narrow",system-ui,sans-serif;fill:var(--ink)}
-.pill-ok,.pill-running{fill:var(--ok-bg)} .pill-slow{fill:var(--warn-bg)} .pill-error{fill:var(--bad-bg)}
-.pill-t-ok,.pill-t-running{fill:var(--ok)} .pill-t-slow{fill:var(--warn)} .pill-t-error{fill:var(--bad)}
-.pill-t{font:600 11px ui-monospace,Menlo,monospace}
-.frame{fill:var(--panel);stroke:var(--ink);stroke-width:2}
-`
+// Colours and fonts are written onto every shape as plain attributes, not in
+// a <style> block: an app that strips <style> from an SVG would otherwise draw
+// every shape in its default black, invisible on a dark pane. Motion is SMIL
+// (<animate>), which lives in attributes too.
+const INK = '#13292C'
+const MUTED = '#5B6E70'
+const LINE = '#B9C7C4'
+const ACCENT = '#E25F2A'
+const OK = '#24895C'
+const WARN = '#C98A12'
+const BAD = '#C8423A'
+const IDEA = '#2D6AA8'
+const PANEL = '#FFFFFF'
+const BG = '#EDF1EF'
+const DISPLAY = 'Barlow Condensed, Arial Narrow, Helvetica Neue, Arial, sans-serif'
+const MONO = 'Menlo, Consolas, monospace'
+const SANS = '-apple-system, Segoe UI, Helvetica, Arial, sans-serif'
+
+type Paint = Record<string, string>
+
+const font = (family: string, size: number, weight = 400): Paint => ({
+  'font-family': family,
+  'font-size': String(size),
+  'font-weight': String(weight),
+})
+
+const CLASSES: Record<string, Paint> = {
+  bg: { fill: BG },
+  bay: { fill: 'none', stroke: LINE, 'stroke-width': '1.5', 'stroke-dasharray': '7 5' },
+  'bay-tbg': { fill: BG },
+  'bay-t': { ...font(DISPLAY, 14, 700), 'letter-spacing': '1.1', fill: INK },
+  'bay-e': { ...font(MONO, 11, 500), fill: MUTED },
+  card: { fill: PANEL, stroke: LINE, 'stroke-width': '2' },
+  'k-agent': { stroke: IDEA },
+  's-running': { stroke: ACCENT },
+  's-error': { stroke: BAD, 'stroke-dasharray': '6 4' },
+  sel: { 'stroke-width': '3.5' },
+  glow: { fill: 'none', stroke: ACCENT, 'stroke-width': '4', opacity: '0.25' },
+  ico: { fill: 'none', stroke: INK, 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+  name: { ...font(DISPLAY, 15, 700), fill: INK },
+  when: { ...font(MONO, 10.5, 500), fill: MUTED },
+  now: { ...font(MONO, 10.5, 500), fill: IDEA },
+  'd-ok': { fill: OK },
+  'd-running': { fill: OK },
+  'd-slow': { fill: WARN },
+  'd-error': { fill: BAD },
+  'd-pending': { fill: LINE },
+  wire: { fill: 'none', stroke: MUTED, 'stroke-width': '2', 'stroke-dasharray': '6 6' },
+  lit: { stroke: ACCENT, 'stroke-width': '3' },
+  fail: { stroke: BAD, 'stroke-dasharray': '3 6', opacity: '0.8' },
+  head: { fill: MUTED },
+  bob: { fill: ACCENT, stroke: PANEL, 'stroke-width': '2' },
+  empty: { ...font(SANS, 13, 500), fill: MUTED },
+  'chip-good': { fill: '#E2F2EA' },
+  'chip-weak': { fill: '#F8E3E1' },
+  'chip-improve': { fill: '#E3ECF7' },
+  'chip-t': { ...font(SANS, 12.5), fill: INK },
+  'mark-good': { ...font(SANS, 13, 700), fill: OK },
+  'mark-weak': { ...font(SANS, 13, 700), fill: BAD },
+  'mark-improve': { ...font(SANS, 13, 700), fill: IDEA },
+  h4: { ...font(DISPLAY, 12.5, 700), 'letter-spacing': '1', fill: INK },
+  dt: { ...font(MONO, 11.5, 500), fill: MUTED },
+  dd: { ...font(MONO, 11.5, 500), fill: INK },
+  title: { ...font(DISPLAY, 22, 700), fill: INK },
+  'pill-ok': { fill: '#E2F2EA' },
+  'pill-running': { fill: '#E2F2EA' },
+  'pill-slow': { fill: '#FAF0DA' },
+  'pill-error': { fill: '#F8E3E1' },
+  'pill-t': font(MONO, 11, 600),
+  'pill-t-ok': { fill: OK },
+  'pill-t-running': { fill: OK },
+  'pill-t-slow': { fill: WARN },
+  'pill-t-error': { fill: BAD },
+  frame: { fill: PANEL, stroke: INK, 'stroke-width': '2' },
+}
+
+function attrsFor(classes: string[]): string {
+  const merged: Paint = {}
+  for (const one of classes) Object.assign(merged, CLASSES[one])
+  // Arrow heads take the colour of their wire; a selected card keeps red if it failed.
+  if (classes.includes('head') && classes.includes('lit')) Object.assign(merged, { fill: ACCENT, stroke: 'none', 'stroke-width': '0' })
+  if (classes.includes('head') && classes.includes('fail')) Object.assign(merged, { fill: BAD, stroke: 'none', 'stroke-dasharray': 'none', opacity: '1' })
+  if (classes.includes('sel') && !classes.includes('s-error')) merged.stroke = INK
+  if (classes.includes('k-agent') && !classes.includes('s-error') && !classes.includes('sel')) merged.stroke = IDEA
+  return Object.entries(merged)
+    .map(([k, v]) => `${k}="${v}"`)
+    .join(' ')
+}
+
+const MARCH = '<animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1.2s" repeatCount="indefinite"/>'
+
+/** Turns the class names into attributes, and adds the motion. */
+function paint(svg: string): string {
+  return svg
+    .replace(/<(path|circle) class="([^"]*)"([^>]*?)\/>/g, (all, tag: string, cls: string, rest: string) => {
+      const classes = cls.split(/\s+/).filter(Boolean)
+      if (tag === 'path' && classes.includes('wire') && !classes.includes('fail')) {
+        return `<path ${attrsFor(classes)}${rest}>${MARCH}</path>`
+      }
+      if (tag === 'circle' && classes.includes('pulse')) {
+        const r = /r="([\d.]+)"/.exec(rest)?.[1] ?? '5'
+        const big = (Number(r) * 1.5).toFixed(1)
+        return `<circle ${attrsFor(classes)}${rest}><animate attributeName="r" values="${r};${big};${r}" dur="1.4s" repeatCount="indefinite"/></circle>`
+      }
+      return all.replace(`class="${cls}"`, attrsFor(classes))
+    })
+    .replace(/class="([^"]*)"/g, (_all, cls: string) => attrsFor(cls.split(/\s+/).filter(Boolean)))
+}
 
 function esc(text: string): string {
   return text
@@ -384,7 +449,7 @@ export function drawFlow(nodes: FlowNode[], tasks: PlanTask[], selected: string 
         `<rect class="card${state === 'running' ? ' s-running' : ''}" x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="11"/>`,
         icon(task.status === 'completed' ? 'check' : 'check', s.x + 9, s.y + 13, 22),
         lines
-          .map((line, j) => `<text class="name" style="font-size:13.5px" x="${s.x + 38}" y="${s.y + (lines.length === 1 ? 30 : 22 + j * 16)}">${esc(line)}</text>`)
+          .map((line, j) => `<text class="name" x="${s.x + 38}" y="${s.y + (lines.length === 1 ? 30 : 22 + j * 16)}">${esc(line)}</text>`)
           .join(''),
         `<circle class="d-${state}${state === 'running' ? ' pulse' : ''}" cx="${s.x + s.w - 10}" cy="${s.y + 10}" r="5"/>`,
         '</g>',
@@ -458,7 +523,7 @@ export function drawFlow(nodes: FlowNode[], tasks: PlanTask[], selected: string 
 
   const height = y + bayH + 14
   const alt = altText(nodes, tasks)
-  const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img"><style>${STYLE}</style><rect class="bg" x="0" y="0" width="${width}" height="${height}" rx="12"/>${parts.join('')}</svg>`
+  const source = paint(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img"><rect class="bg" x="0" y="0" width="${width}" height="${height}" rx="12"/>${parts.join('')}</svg>`)
   return { source, alt, height }
 }
 
@@ -523,7 +588,7 @@ export function drawDetail(node: FlowNode, width: number): Drawing {
       const ch = lines.length * 16 + 10
       parts.push(
         `<rect class="chip-${kind}" x="18" y="${y}" width="${w - 36}" height="${ch}" rx="8"/>`,
-        `<text class="mark-${kind}" style="font:700 13px system-ui" x="27" y="${y + 18}">${mark}</text>`,
+        `<text class="mark-${kind}" x="27" y="${y + 18}">${mark}</text>`,
         lines.map((line, i) => `<text class="chip-t" x="42" y="${y + 18 + i * 16}">${esc(line)}</text>`).join(''),
       )
       y += ch + 5
@@ -535,7 +600,7 @@ export function drawDetail(node: FlowNode, width: number): Drawing {
   section('IMPROVE', chips.improve, 'improve', '→')
 
   const height = y + 10
-  const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${height}" viewBox="0 0 ${w} ${height}" role="img"><style>${STYLE}</style><rect class="frame" x="1" y="1" width="${w - 2}" height="${height - 2}" rx="14"/>${parts.join('')}</svg>`
+  const source = paint(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${height}" viewBox="0 0 ${w} ${height}" role="img"><rect class="frame" x="1" y="1" width="${w - 2}" height="${height - 2}" rx="14"/>${parts.join('')}</svg>`)
   const alt = `${node.name}: ${word}. Where: ${node.where || 'n/a'}. Time: ${timeOf(node)}. ${[
     ...chips.good.map(c => `Good: ${c}.`),
     ...chips.weak.map(c => `Weak: ${c}.`),
