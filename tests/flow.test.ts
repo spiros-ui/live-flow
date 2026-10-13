@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { flowMarkdown } from '../hooks/flow'
+
 const PANE = {
   plugin: 'live-flow',
   component: 'Pane',
@@ -157,5 +159,21 @@ describe('live-flow', () => {
       expect(await ui.find({ text: /List the files/ })).toBeDefined()
       await ui.unmount()
     }
+  })
+
+  test('/flow answers with the flow as chat text, which every app shows', () => {
+    const at = 1_000_000
+    const base = { count: 1, running: 0, startedAt: at, endedAt: at + 500, where: '' }
+    const text = flowMarkdown(
+      [
+        { ...base, id: 'a', kind: 'tool', icon: 'terminal', name: 'List the files', status: 'ok' },
+        { ...base, id: 'b', kind: 'tool', icon: 'terminal', name: 'Build the app', status: 'error', error: 'Exit code 1' },
+      ],
+      [{ id: '1', subject: 'Ship it', status: 'in_progress' }],
+    )
+    expect(text).toContain('🔄 Ship it')
+    expect(text).toContain('🟢 💻 **List the files**')
+    expect(text).toContain('↓')
+    expect(text).toContain('🔴 💻 **Build the app** · 500ms · failed: Exit code 1')
   })
 })

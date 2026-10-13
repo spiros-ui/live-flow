@@ -9,6 +9,7 @@ import {
   drawDetail,
   drawFlow,
   finishedStatus,
+  flowMarkdown,
   groupOf,
   isHidden,
   statusLine,
@@ -60,12 +61,10 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'flow' }, async $ => {
-    const opened = await $.ui.open({ id: PANE, title: TITLE })
+    await $.ui.open({ id: PANE, title: TITLE })
     await refreshStatus($)
 
-    return {
-      text: opened.isPlaced ? 'Live flow, also open in its pane.' : 'Live flow.',
-    }
+    return { text: flowMarkdown(await read($, nodes), await read($, tasks)) }
   })
 
   on('prompt.submit', async ($, e, next) => {
