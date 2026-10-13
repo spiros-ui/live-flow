@@ -1,0 +1,11 @@
+{
+  "name": "live-flow",
+  "owner": { "name": "Spiros" },
+  "plugins": [
+    {
+      "name": "live-flow",
+      "source": "./",
+      "description": "A live pane that draws what Claude is doing as boxes and moving arrows."
+    }
+  ]
+}
